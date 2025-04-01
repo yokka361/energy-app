@@ -8,12 +8,25 @@ import {
   Modal,
   SafeAreaView,
   ActivityIndicator,
-  ScrollView
+  ScrollView,
+  AppState,
+  AppStateStatus,
+  Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../app/(tabs)/index'; // Adjust the import path as necessary
 import { useESP8266, THRESHOLD_1, THRESHOLD_2 } from '../utils/mockESPData'; // Import our mock ESP data
+import * as Notifications from 'expo-notifications';
+
+// Configure notifications
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 
 // Define component props type
 type HomeScreenProps = {
@@ -25,17 +38,52 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [showWarning, setShowWarning] = useState<boolean>(false);
+  const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState);
+  const [notificationPermission, setNotificationPermission] = useState<boolean>(false);
   
   // Use our mock ESP8266 hook
   const { espData, connect, disconnect, toggleComponent, turnOffAll } = useESP8266();
   const { connected, components, powerUsage, threshold } = espData;
   
-  // Show warning modal when threshold is detected
+  // Setup notification permissions
   useEffect(() => {
-    if (threshold) {
+    registerForPushNotificationsAsync().then(granted => {
+      setNotificationPermission(granted);
+    });
+  }, []);
+  
+  // Monitor app state changes
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      setAppState(nextAppState);
+    });
+    
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+  
+  // Handle notifications based on power threshold and app state
+  useEffect(() => {
+    if (threshold && (appState !== 'active' || appState === 'background' || appState === 'inactive')) {
+      const thresholdText = threshold === 1 ? 'Warning' : 'Critical';
+      const message = threshold === 1 
+        ? `Power usage (${powerUsage}W) has exceeded the warning threshold.`
+        : `Power usage (${powerUsage}W) has reached critical levels!`;
+      
+      // Show notification when app is not in foreground
+      if (notificationPermission) {
+        schedulePushNotification(thresholdText, message);
+      }
+    }
+  }, [threshold, appState, powerUsage, notificationPermission]);
+  
+  // Show warning modal when threshold is detected and app is in foreground
+  useEffect(() => {
+    if (threshold && appState === 'active') {
       setShowWarning(true);
     }
-  }, [threshold]);
+  }, [threshold, appState]);
   
   // Connect to ESP8266
   const handleConnect = async (): Promise<void> => {
@@ -135,6 +183,24 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           )}
         </TouchableOpacity>
         
+        {/* Notification permission status */}
+        {!notificationPermission && (
+          <View style={styles.notificationWarning}>
+            <Ionicons name="notifications-off" size={20} color="#D32F2F" />
+            <Text style={styles.notificationWarningText}>
+              Notifications are disabled. Enable for alerts when app is in background.
+            </Text>
+            <TouchableOpacity 
+              style={styles.notificationButton}
+              onPress={() => registerForPushNotificationsAsync().then(granted => {
+                setNotificationPermission(granted);
+              })}
+            >
+              <Text style={styles.notificationButtonText}>Enable</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        
         {/* Error message if connection fails */}
         {error && (
           <View style={styles.errorContainer}>
@@ -215,6 +281,14 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
                  powerUsage > THRESHOLD_1 ? 'WARNING' : 'NORMAL'}
               </Text>
             </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Notifications:</Text>
+              <Text style={[styles.infoValue, { 
+                color: notificationPermission ? '#4CAF50' : '#F44336' 
+              }]}>
+                {notificationPermission ? 'ENABLED' : 'DISABLED'}
+              </Text>
+            </View>
           </View>
         )}
         
@@ -232,7 +306,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         </TouchableOpacity>
       </ScrollView>
       
-      {/* Warning modal */}
+      {/* Warning modal with individual component control */}
       <Modal
         visible={showWarning}
         transparent={true}
@@ -250,6 +324,27 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
                 : `Power usage (${powerUsage}W) has reached critical levels!`
               }
             </Text>
+            
+            {/* List of active components to control individually */}
+            <View style={styles.componentControls}>
+              <Text style={styles.componentControlTitle}>Turn off specific components:</Text>
+              
+              {components.filter(comp => comp.isOn).map((component) => (
+                <TouchableOpacity
+                  key={component.id}
+                  style={styles.componentControlButton}
+                  onPress={() => handleToggleComponent(component.id)}
+                >
+                  <Ionicons name="power" size={18} color="white" />
+                  <Text style={styles.componentControlText}>{component.name}</Text>
+                </TouchableOpacity>
+              ))}
+              
+              {/* Show message if no components are on */}
+              {components.filter(comp => comp.isOn).length === 0 && (
+                <Text style={styles.noComponentsText}>No active components to turn off.</Text>
+              )}
+            </View>
             
             <View style={styles.warningButtons}>
               <TouchableOpacity
@@ -271,6 +366,46 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       </Modal>
     </SafeAreaView>
   );
+}
+
+// Function to register for push notifications
+async function registerForPushNotificationsAsync(): Promise<boolean> {
+  let granted = false;
+  
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('power-alerts', {
+      name: 'Power Alerts',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF231F7C',
+    });
+  }
+
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  let finalStatus = existingStatus;
+  
+  if (existingStatus !== 'granted') {
+    const { status } = await Notifications.requestPermissionsAsync();
+    finalStatus = status;
+  }
+  
+  granted = finalStatus === 'granted';
+  
+  return granted;
+}
+
+// Function to schedule a push notification
+async function schedulePushNotification(title: string, body: string): Promise<void> {
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: `Smart Power Monitor - ${title}`,
+      body: body,
+      data: { data: 'power-alert' },
+      sound: true,
+      priority: Notifications.AndroidNotificationPriority.HIGH,
+    },
+    trigger: null, // null means send immediately
+  });
 }
 
 const styles = StyleSheet.create({
@@ -309,6 +444,33 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     marginLeft: 8,
+  },
+  notificationWarning: {
+    backgroundColor: '#FFEBEE',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  notificationWarningText: {
+    color: '#D32F2F',
+    fontSize: 14,
+    marginLeft: 8,
+    flex: 1,
+  },
+  notificationButton: {
+    backgroundColor: '#D32F2F',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  notificationButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 12,
   },
   errorContainer: {
     backgroundColor: '#FFEBEE',
@@ -451,8 +613,37 @@ const styles = StyleSheet.create({
   warningText: {
     fontSize: 14,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
     color: '#555',
+  },
+  componentControls: {
+    width: '100%',
+    marginBottom: 16,
+  },
+  componentControlTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+    color: '#333',
+  },
+  componentControlButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F44336',
+    padding: 10,
+    borderRadius: 6,
+    marginVertical: 4,
+  },
+  componentControlText: {
+    color: 'white',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  noComponentsText: {
+    color: '#757575',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginVertical: 8,
   },
   warningButtons: {
     flexDirection: 'row',
