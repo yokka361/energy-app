@@ -65,7 +65,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   
   // Handle notifications based on power threshold and app state
   useEffect(() => {
-    if (threshold && (appState !== 'active' || appState === 'background' || appState === 'inactive')) {
+   if (threshold && appState !== 'active') {
       const thresholdText = threshold === 1 ? 'Warning' : 'Critical';
       const message = threshold === 1 
         ? `Power usage (${powerUsage}W) has exceeded the warning threshold.`
