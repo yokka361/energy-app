@@ -16,12 +16,12 @@ export default function AppNavigator() {
       <Stack.Screen 
         name="Home" 
         component={HomeScreen} 
-        options={{ title: 'Smart Power Monitor' }} 
+        options={{ title: 'Smart Energy Meter' }} 
       />
       <Stack.Screen 
         name="Tariff" 
         component={TariffScreen} 
-        options={{ title: 'Tariff & Cost Details' }} 
+        options={{ title: 'Tariff Calculation' }} 
       />
     </Stack.Navigator>
   );

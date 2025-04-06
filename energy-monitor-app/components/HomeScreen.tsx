@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
-  TouchableOpacity, 
+// HomeScreen.tsx
+import React, { useState, useEffect } from "react";
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
   Alert,
   Modal,
   SafeAreaView,
@@ -11,13 +12,19 @@ import {
   ScrollView,
   AppState,
   AppStateStatus,
-  Platform
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../app/(tabs)/index'; // Adjust the import path as necessary
-import { useESP8266, THRESHOLD_1, THRESHOLD_2 } from '../utils/mockESPData'; // Import our mock ESP data
-import * as Notifications from 'expo-notifications';
+  Platform,
+} from "react-native";
+// import { Audio } from "expo-av";
+import { Vibration } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { StackNavigationProp } from "@react-navigation/stack";
+import { RootStackParamList } from "../app/(tabs)/index"; // Adjust the import path as necessary
+import * as Notifications from "expo-notifications";
+import { db } from "../firebaseConfig";
+import { ref, onValue, set } from "firebase/database";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+
+
 
 // Configure notifications
 Notifications.setNotificationHandler({
@@ -30,322 +37,328 @@ Notifications.setNotificationHandler({
 
 // Define component props type
 type HomeScreenProps = {
-  navigation: StackNavigationProp<RootStackParamList, 'Home'>;
+  navigation: StackNavigationProp<RootStackParamList, "Home">;
+};
+
+type MonitoringData = {
+  component1: boolean;
+  component2: boolean;
+  component3: boolean;
+  dailyEnergy: number;
+  power: number;
+  thresholdLevel: number;
+  totalEnergy: number;
+  WARNING_THRESHOLD: number;
+  CRITICAL_THRESHOLD: number;
 };
 
 export default function HomeScreen({ navigation }: HomeScreenProps) {
   // State variables
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [monitoringData, setMonitoringData] = useState<MonitoringData>({
+    component1: false,
+    component2: false,
+    component3: false,
+    dailyEnergy: 0,
+    power: 0,
+    thresholdLevel: 0,
+    totalEnergy: 0,
+    WARNING_THRESHOLD: 0.1,
+    CRITICAL_THRESHOLD: 0.3,
+  });
   const [showWarning, setShowWarning] = useState<boolean>(false);
-  const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState);
-  const [notificationPermission, setNotificationPermission] = useState<boolean>(false);
-  
-  // Use our mock ESP8266 hook
-  const { espData, connect, disconnect, toggleComponent, turnOffAll } = useESP8266();
-  const { connected, components, powerUsage, threshold } = espData;
-  
+  const [appState, setAppState] = useState<AppStateStatus>(
+    AppState.currentState
+  );
+  const [notificationPermission, setNotificationPermission] =
+    useState<boolean>(false);
+
+  // Listen for realtime updates from Firebase
+  useEffect(() => {
+    const monitoringRef = ref(db, "monitoring");
+    const unsubscribe = onValue(
+      monitoringRef,
+      (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          setMonitoringData(data);
+        }
+        setLoading(false);
+      },
+      (err) => {
+        setError("Failed to fetch monitoring data.");
+        setLoading(false);
+      }
+    );
+    return () => {
+      // onValue returns an unsubscribe function
+      unsubscribe();
+    };
+  }, []);
+
   // Setup notification permissions
   useEffect(() => {
-    registerForPushNotificationsAsync().then(granted => {
+    registerForPushNotificationsAsync().then((granted) => {
       setNotificationPermission(granted);
     });
   }, []);
-  
+
   // Monitor app state changes
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', nextAppState => {
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
       setAppState(nextAppState);
     });
-    
     return () => {
       subscription.remove();
     };
   }, []);
-  
-  // Handle notifications based on power threshold and app state
+
+  // Handle notifications and warning modal based on threshold and app state
   useEffect(() => {
-   if (threshold && appState !== 'active') {
-      const thresholdText = threshold === 1 ? 'Warning' : 'Critical';
-      const message = threshold === 1 
-        ? `Power usage (${powerUsage}W) has exceeded the warning threshold.`
-        : `Power usage (${powerUsage}W) has reached critical levels!`;
-      
-      // Show notification when app is not in foreground
+    if (monitoringData.thresholdLevel && appState !== "active") {
+      const thresholdText =
+        monitoringData.thresholdLevel === 1 ? "Warning" : "Critical";
+      const message =
+        monitoringData.thresholdLevel === 1
+          ? `Power usage (${monitoringData.power}W) has exceeded the warning threshold.`
+          : `Power usage (${monitoringData.power}W) has reached critical levels!`;
+
       if (notificationPermission) {
         schedulePushNotification(thresholdText, message);
       }
     }
-  }, [threshold, appState, powerUsage, notificationPermission]);
-  
-  // Show warning modal when threshold is detected and app is in foreground
+  }, [
+    monitoringData.thresholdLevel,
+    appState,
+    monitoringData.power,
+    notificationPermission,
+  ]);
+
+  const WARNING_THRESHOLD = monitoringData.WARNING_THRESHOLD/30; //in Wh
+  const CRITICAL_THRESHOLD = monitoringData.CRITICAL_THRESHOLD/30; //in Wh
   useEffect(() => {
-    if (threshold && appState === 'active') {
+    if (monitoringData.thresholdLevel && appState === "active") {
       setShowWarning(true);
+      Vibration.vibrate(4000); // Vibrates for 4 seconds
     }
-  }, [threshold, appState]);
-  
-  // Connect to ESP8266
-  const handleConnect = async (): Promise<void> => {
-    setLoading(true);
-    setError(null);
-    
+  }, [monitoringData.thresholdLevel, appState]);
+
+  // Send command to Firebase for toggling a component
+  const handleToggleComponent = async (componentId: number): Promise<void> => {
+    const currentState = monitoringData[
+      `component${componentId}` as keyof MonitoringData
+    ] as boolean;
+    const newState = currentState ? "OFF" : "ON";
+    const command = `TOGGLE:${componentId}:${newState}`;
+
     try {
-      await connect();
+      // Step 1: Clear command first
+      await set(ref(db, "monitoring/command"), "NONE");
+
+      // Step 2: Wait a bit to let Firebase recognize the change
+      setTimeout(async () => {
+        // Step 3: Send new command
+        await set(ref(db, "monitoring/command"), command);
+      }, 200); // ~200ms delay is usually enough
     } catch (err) {
-      setError("Failed to connect to ESP8266. Please check if the device is powered on.");
-    } finally {
-      setLoading(false);
+      Alert.alert("Error", "Failed to send toggle command.");
     }
   };
-  
-  // Disconnect from ESP8266
-  const handleDisconnect = (): void => {
-    disconnect();
-  };
-  
-  // Toggle component state
-  const handleToggleComponent = async (id: number): Promise<void> => {
-    if (!connected) {
-      Alert.alert("Not Connected", "Please connect to ESP8266 first.");
-      return;
-    }
-    
-    try {
-      await toggleComponent(id);
-    } catch (err) {
-      Alert.alert("Error", "Failed to control device. Check connection.");
-    }
-  };
-  
+
   // Dismiss the warning alert
   const dismissWarning = (): void => {
     setShowWarning(false);
   };
-  
-  // Turn off all components to respond to high power warning
+
+  // Send command to Firebase to turn off all components
   const handleTurnOffAll = async (): Promise<void> => {
     try {
-      await turnOffAll();
+      await set(ref(db, "monitoring/command"), "TURNOFFALL");
       dismissWarning();
     } catch (err) {
-      Alert.alert("Error", "Failed to turn off devices. Please try again.");
+      Alert.alert("Error", "Failed to send turn off all command.");
     }
   };
-  
-  // Navigate to Tariff screen
+
+  // Navigate to Tariff screen and pass power usage
   const goToTariffPage = (): void => {
-    // Pass current power usage to Tariff page
-    navigation.navigate('Tariff', { powerUsage });
+    navigation.navigate("Tariff", { powerUsage: monitoringData.power });
   };
-  
+
   // Component status button color
   const getButtonColor = (isOn: boolean): string => {
-    return isOn ? '#4CAF50' : '#F44336';
+    return isOn ? "#4CAF50" : "#F44336";
   };
-  
+
   // Handle power level display color
   const getPowerDisplayColor = (): string => {
-    if (powerUsage > THRESHOLD_2) return '#F44336'; // Red for high power
-    if (powerUsage > THRESHOLD_1) return '#FFA500'; // Orange for warning
-    return '#4CAF50'; // Green for normal
+    if (monitoringData.dailyEnergy > CRITICAL_THRESHOLD) return "#F44336"; // critical level (adjust as needed)
+    if (monitoringData.dailyEnergy > WARNING_THRESHOLD) return "#FFA500"; // warning level (adjust as needed)
+    return "#4CAF50";
   };
-  
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ActivityIndicator size="large" color="#3F51B5" />
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text style={styles.errorText}>{error}</Text>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView>
-        {/* Connection status */}
-        <View style={styles.statusContainer}>
-          <View style={[styles.statusIndicator, { backgroundColor: connected ? '#4CAF50' : '#F44336' }]} />
-          <Text style={styles.statusText}>
-            {connected ? 'Connected to ESP8266' : 'Not Connected'}
-          </Text>
-        </View>
-        
-        {/* Connect/Disconnect button */}
-        <TouchableOpacity 
+        {/* Display monitoring power usage */}
+        <View
           style={[
-            styles.connectButton, 
-            { backgroundColor: connected ? '#F44336' : '#3F51B5' }
+            styles.powerContainer,
+            { backgroundColor: getPowerDisplayColor() },
           ]}
-          onPress={connected ? handleDisconnect : handleConnect}
-          disabled={loading}
         >
-          {loading ? (
-            <ActivityIndicator size="small" color="white" />
-          ) : (
-            <>
-              <Ionicons name={connected ? "wifi-off" : "wifi"} size={24} color="white" />
-              <Text style={styles.connectButtonText}>
-                {connected ? 'Disconnect' : 'Connect to ESP8266'}
-              </Text>
-            </>
-          )}
-        </TouchableOpacity>
-        
-        {/* Notification permission status */}
-        {!notificationPermission && (
-          <View style={styles.notificationWarning}>
-            <Ionicons name="notifications-off" size={20} color="#D32F2F" />
-            <Text style={styles.notificationWarningText}>
-              Notifications are disabled. Enable for alerts when app is in background.
-            </Text>
-            <TouchableOpacity 
-              style={styles.notificationButton}
-              onPress={() => registerForPushNotificationsAsync().then(granted => {
-                setNotificationPermission(granted);
-              })}
-            >
-              <Text style={styles.notificationButtonText}>Enable</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        
-        {/* Error message if connection fails */}
-        {error && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity 
-              style={styles.retryButton}
-              onPress={handleConnect}
-            >
-              <Text style={styles.retryButtonText}>Retry</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        
-        {/* Power usage display */}
-        <View style={[
-          styles.powerContainer, 
-          { 
-            backgroundColor: connected ? getPowerDisplayColor() : '#9E9E9E',
-            opacity: connected ? 1 : 0.7 
-          }
-        ]}>
           <Ionicons name="flash" size={28} color="white" />
           <Text style={styles.powerText}>
-            {connected 
-              ? `Current Power Usage: ${powerUsage}W` 
-              : 'Connect to view power usage'}
+            {`Today Pdsfower Usage:  ${monitoringData.dailyEnergy}Wh`}
           </Text>
         </View>
-        
+
         {/* Component control buttons */}
-        <View style={[
-          styles.componentsContainer,
-          { opacity: connected ? 1 : 0.7 }
-        ]}>
+        <View style={styles.componentsContainer}>
           <Text style={styles.sectionTitle}>Components</Text>
-          {components.map((component) => (
-            <View key={component.id} style={styles.componentRow}>
-              <Text style={styles.componentName}>{component.name}</Text>
-              <TouchableOpacity
-                style={[
-                  styles.controlButton, 
-                  { 
-                    backgroundColor: connected 
-                      ? getButtonColor(component.isOn) 
-                      : '#9E9E9E'
-                  }
-                ]}
-                onPress={() => handleToggleComponent(component.id)}
-                disabled={!connected}
-              >
-                <Text style={styles.buttonText}>
-                  {component.isOn ? 'ON' : 'OFF'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ))}
+          {[1, 2, 3].map((id) => {
+            const isOn = monitoringData[
+              `component${id}` as keyof MonitoringData
+            ] as boolean;
+            return (
+              <View key={id} style={styles.componentRow}>
+                <Text style={styles.componentName}>{`Component ${id}`}</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.controlButton,
+                    { backgroundColor: getButtonColor(isOn) },
+                  ]}
+                  onPress={() => handleToggleComponent(id)}
+                >
+                  <Text style={styles.buttonText}>{isOn ? "ON" : "OFF"}</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })}
         </View>
-        
-        {/* Power usage information */}
-        {connected && (
-          <View style={styles.infoContainer}>
-            <Text style={styles.infoTitle}>Power Information</Text>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Warning Threshold:</Text>
-              <Text style={styles.infoValue}>{THRESHOLD_1}W</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Critical Threshold:</Text>
-              <Text style={styles.infoValue}>{THRESHOLD_2}W</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Current Status:</Text>
-              <Text style={[styles.infoValue, { 
-                color: powerUsage > THRESHOLD_2 ? '#F44336' : 
-                       powerUsage > THRESHOLD_1 ? '#FFA500' : '#4CAF50' 
-              }]}>
-                {powerUsage > THRESHOLD_2 ? 'CRITICAL' : 
-                 powerUsage > THRESHOLD_1 ? 'WARNING' : 'NORMAL'}
-              </Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Notifications:</Text>
-              <Text style={[styles.infoValue, { 
-                color: notificationPermission ? '#4CAF50' : '#F44336' 
-              }]}>
-                {notificationPermission ? 'ENABLED' : 'DISABLED'}
-              </Text>
-            </View>
+
+        {/* Power information details */}
+        <View style={styles.infoContainer}>
+          <Text style={styles.infoTitle}>Power Information</Text>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Warning Threshold:</Text>
+            <Text style={styles.infoValue}> 0.1Wh</Text>
           </View>
-        )}
-        
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Critical Threshold:</Text>
+            <Text style={styles.infoValue}> 0.3Wh</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Current Status:</Text>
+            <Text
+              style={[
+                styles.infoValue,
+                {
+                  color:
+                    monitoringData.dailyEnergy > CRITICAL_THRESHOLD
+                      ? "#F44336"
+                      : monitoringData.dailyEnergy > WARNING_THRESHOLD
+                      ? "#FFA500"
+                      : "#4CAF50",
+                },
+              ]}
+            >
+              {monitoringData.dailyEnergy > CRITICAL_THRESHOLD
+                ? "CRITICAL"
+                : monitoringData.dailyEnergy > WARNING_THRESHOLD
+                ? "WARNING"
+                : "NORMAL"}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.monthlyUsageCard}>
+          <Text style={styles.cardTitle}>Monthly Power Usage</Text>
+          <View style={styles.usageRow}>
+            <Text style={styles.usageValue}>
+              {(monitoringData.totalEnergy).toFixed(2)}
+              <Text style={styles.unit}> Wh</Text>
+            </Text>
+            <Text style={styles.subtext}>
+              Total Energy Usage This Month
+            </Text>
+          </View>
+        </View>
+
         {/* Navigation button to Tariff page */}
-        <TouchableOpacity 
-          style={[
-            styles.tariffButton,
-            { opacity: connected ? 1 : 0.7 }
-          ]}
-          onPress={goToTariffPage}
-          disabled={!connected}
-        >
+        <TouchableOpacity style={styles.tariffButton} onPress={goToTariffPage}>
           <Ionicons name="stats-chart" size={24} color="white" />
           <Text style={styles.tariffButtonText}>Go to Tariff Page</Text>
         </TouchableOpacity>
       </ScrollView>
-      
+
       {/* Warning modal with individual component control */}
-      <Modal
-        visible={showWarning}
-        transparent={true}
-        animationType="slide"
-      >
+      <Modal visible={showWarning} transparent={true} animationType="slide">
         <View style={styles.centeredView}>
           <View style={styles.warningModal}>
             <Ionicons name="warning" size={36} color="#FFA500" />
             <Text style={styles.warningTitle}>
-              {threshold === 1 ? 'Warning: Power Threshold Reached' : 'Critical: High Power Usage'}
+              {monitoringData.thresholdLevel === 1
+                ? "Warning: Power Threshold Reached"
+                : "Critical: High Power Usage"}
             </Text>
             <Text style={styles.warningText}>
-              {threshold === 1 
-                ? `Power usage (${powerUsage}W) has exceeded the first threshold.` 
-                : `Power usage (${powerUsage}W) has reached critical levels!`
-              }
+              {monitoringData.thresholdLevel === 1
+                ? `Power usage (${monitoringData.power}W) has exceeded the warning threshold.`
+                : `Power usage (${monitoringData.power}W) has reached critical levels!`}
             </Text>
-            
+
             {/* List of active components to control individually */}
             <View style={styles.componentControls}>
-              <Text style={styles.componentControlTitle}>Turn off specific components:</Text>
-              
-              {components.filter(comp => comp.isOn).map((component) => (
-                <TouchableOpacity
-                  key={component.id}
-                  style={styles.componentControlButton}
-                  onPress={() => handleToggleComponent(component.id)}
-                >
-                  <Ionicons name="power" size={18} color="white" />
-                  <Text style={styles.componentControlText}>{component.name}</Text>
-                </TouchableOpacity>
-              ))}
-              
+              <Text style={styles.componentControlTitle}>
+                Turn off specific components:
+              </Text>
+              {[1, 2, 3].map((id) => {
+                const isOn = monitoringData[
+                  `component${id}` as keyof MonitoringData
+                ] as boolean;
+                return isOn ? (
+                  <TouchableOpacity
+                    key={id}
+                    style={styles.componentControlButton}
+                    onPress={() => handleToggleComponent(id)}
+                  >
+                    <Ionicons name="power" size={18} color="white" />
+                    <Text
+                      style={styles.componentControlText}
+                    >{`Component ${id}`}</Text>
+                  </TouchableOpacity>
+                ) : null;
+              })}
               {/* Show message if no components are on */}
-              {components.filter(comp => comp.isOn).length === 0 && (
-                <Text style={styles.noComponentsText}>No active components to turn off.</Text>
+              {![
+                monitoringData.component1,
+                monitoringData.component2,
+                monitoringData.component3,
+              ].some(Boolean) && (
+                <Text style={styles.noComponentsText}>
+                  No active components to turn off.
+                </Text>
               )}
             </View>
-            
+
             <View style={styles.warningButtons}>
               <TouchableOpacity
                 style={[styles.warningButton, styles.actionButton]}
@@ -353,7 +366,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
               >
                 <Text style={styles.warningButtonText}>Turn Off All</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={[styles.warningButton, styles.dismissButton]}
                 onPress={dismissWarning}
@@ -371,146 +384,130 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
 // Function to register for push notifications
 async function registerForPushNotificationsAsync(): Promise<boolean> {
   let granted = false;
-  
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('power-alerts', {
-      name: 'Power Alerts',
+
+  if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync("power-alerts", {
+      name: "Power Alerts",
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#FF231F7C',
+      lightColor: "#FF231F7C",
+      sound: "default",
     });
   }
 
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
-  
-  if (existingStatus !== 'granted') {
+
+  if (existingStatus !== "granted") {
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
   }
-  
-  granted = finalStatus === 'granted';
-  
+
+  granted = finalStatus === "granted";
   return granted;
 }
 
 // Function to schedule a push notification
-async function schedulePushNotification(title: string, body: string): Promise<void> {
+async function schedulePushNotification(
+  title: string,
+  body: string
+): Promise<void> {
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: `Smart Power Monitor - ${title}`,
+      title: `Smart Energy Meter - ${title}`,
       body: body,
-      data: { data: 'power-alert' },
-      sound: true,
+      data: { data: "power-alert" },
+      sound: "default",
       priority: Notifications.AndroidNotificationPriority.HIGH,
     },
-    trigger: null, // null means send immediately
+    trigger: null, // send immediately
+    // Removed the android property as it is not valid in NotificationRequestInput
   });
 }
 
+// async function playWarningSound(): Promise<void> {
+//   try {
+//     const { sound } = await Audio.Sound.createAsync(
+//       require("../assets/warning.mp3") // Place your sound file in assets folder
+//     );
+//     await sound.playAsync();
+//   } catch (error) {
+//     console.warn("Failed to play warning sound:", error);
+//   }
+// }
+
 const styles = StyleSheet.create({
+monthlyUsageCard: {
+  backgroundColor: '#ffffff',
+  borderRadius: 16,
+  padding: 20,
+  marginHorizontal: 20,
+  marginTop: -10,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.1,
+  shadowRadius: 6,
+  elevation: 4,
+  borderWidth: 1,
+  borderColor: '#eee',
+},
+
+cardTitle: {
+  fontSize: 15,
+  color: '#333333',
+  marginBottom: 15,
+  fontWeight: '600',
+},
+
+usageRow: {
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+},
+
+usageValue: {
+  fontSize: 36,
+  color: '#4CAF50', // Clean green
+  fontWeight: 'bold',
+},
+
+unit: {
+  fontSize: 20,
+  color: '#888888',
+},
+
+subtext: {
+  fontSize: 14,
+  color: '#999999',
+  marginTop: 4,
+},
+
+
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: "#f5f5f5",
     padding: 16,
-  },
-  statusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  statusIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 8,
-  },
-  statusText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  connectButton: {
-    backgroundColor: '#3F51B5',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 14,
-    borderRadius: 8,
-    marginBottom: 16,
-    elevation: 2,
-  },
-  connectButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  notificationWarning: {
-    backgroundColor: '#FFEBEE',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
-  notificationWarningText: {
-    color: '#D32F2F',
-    fontSize: 14,
-    marginLeft: 8,
-    flex: 1,
-  },
-  notificationButton: {
-    backgroundColor: '#D32F2F',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    marginLeft: 8,
-  },
-  notificationButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
-  errorContainer: {
-    backgroundColor: '#FFEBEE',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 16,
-    alignItems: 'center',
   },
   errorText: {
-    color: '#D32F2F',
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  retryButton: {
-    backgroundColor: '#D32F2F',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 4,
-  },
-  retryButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
+    color: "#D32F2F",
+    fontSize: 16,
+    textAlign: "center",
   },
   powerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#4CAF50',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     padding: 20,
     borderRadius: 8,
-    marginBottom: 24,
+    marginBottom: 34,
   },
   powerText: {
-    color: 'white',
+    color: "white",
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginLeft: 8,
   },
   componentsContainer: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 8,
     padding: 16,
     marginBottom: 24,
@@ -518,35 +515,35 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 12,
-    color: '#333',
+    color: "#333",
   },
   componentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: "#f0f0f0",
   },
   componentName: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   controlButton: {
     paddingHorizontal: 24,
     paddingVertical: 10,
     borderRadius: 4,
     minWidth: 80,
-    alignItems: 'center',
+    alignItems: "center",
   },
   buttonText: {
-    color: 'white',
-    fontWeight: 'bold',
+    color: "white",
+    fontWeight: "bold",
   },
   infoContainer: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 8,
     padding: 16,
     marginBottom: 24,
@@ -554,117 +551,118 @@ const styles = StyleSheet.create({
   },
   infoTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 12,
-    color: '#333',
+    color: "#333",
   },
   infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: "#f0f0f0",
   },
   infoLabel: {
     fontSize: 14,
-    color: '#555',
+    color: "#555",
   },
   infoValue: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   tariffButton: {
-    backgroundColor: '#3F51B5',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginTop: 16,
+    backgroundColor: "#3F51B5",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     padding: 16,
     borderRadius: 8,
     elevation: 2,
     marginBottom: 24,
   },
   tariffButtonText: {
-    color: 'white',
+    color: "white",
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginLeft: 8,
   },
   centeredView: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   warningModal: {
-    width: '80%',
-    backgroundColor: 'white',
+    width: "80%",
+    backgroundColor: "white",
     borderRadius: 12,
     padding: 20,
-    alignItems: 'center',
+    alignItems: "center",
     elevation: 5,
   },
   warningTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginTop: 12,
     marginBottom: 8,
-    textAlign: 'center',
+    textAlign: "center",
   },
   warningText: {
     fontSize: 14,
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: 16,
-    color: '#555',
+    color: "#555",
   },
   componentControls: {
-    width: '100%',
+    width: "100%",
     marginBottom: 16,
   },
   componentControlTitle: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
     marginBottom: 8,
-    color: '#333',
+    color: "#333",
   },
   componentControlButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F44336',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F44336",
     padding: 10,
     borderRadius: 6,
     marginVertical: 4,
   },
   componentControlText: {
-    color: 'white',
+    color: "white",
     marginLeft: 8,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   noComponentsText: {
-    color: '#757575',
-    fontStyle: 'italic',
-    textAlign: 'center',
+    color: "#757575",
+    fontStyle: "italic",
+    textAlign: "center",
     marginVertical: 8,
   },
   warningButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
   },
   warningButton: {
     flex: 1,
     padding: 12,
     borderRadius: 4,
-    alignItems: 'center',
+    alignItems: "center",
     margin: 4,
   },
   actionButton: {
-    backgroundColor: '#F44336',
+    backgroundColor: "#F44336",
   },
   dismissButton: {
-    backgroundColor: '#9E9E9E',
+    backgroundColor: "#9E9E9E",
   },
   warningButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
+    color: "white",
+    fontWeight: "bold",
   },
 });
