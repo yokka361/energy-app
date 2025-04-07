@@ -224,7 +224,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         >
           <Ionicons name="flash" size={28} color="white" />
           <Text style={styles.powerText}>
-            {`Today Pdsfower Usage:  ${monitoringData.dailyEnergy}Wh`}
+            {`Today Power Usage:  ${monitoringData.dailyEnergy}Wh`}
           </Text>
         </View>
 
@@ -436,9 +436,11 @@ async function schedulePushNotification(
 
 const styles = StyleSheet.create({
 monthlyUsageCard: {
+  flex: 1,
+  flexDirection: 'column',
   backgroundColor: '#ffffff',
   borderRadius: 16,
-  padding: 20,
+  padding: 15,
   marginHorizontal: 20,
   marginTop: -10,
   shadowColor: '#000',
@@ -448,12 +450,13 @@ monthlyUsageCard: {
   elevation: 4,
   borderWidth: 1,
   borderColor: '#eee',
+  marginBottom: 20,
 },
 
 cardTitle: {
   fontSize: 15,
   color: '#333333',
-  marginBottom: 15,
+  marginBottom: 12,
   fontWeight: '600',
 },
 
@@ -463,7 +466,7 @@ usageRow: {
 },
 
 usageValue: {
-  fontSize: 36,
+  fontSize: 32,
   color: '#4CAF50', // Clean green
   fontWeight: 'bold',
 },
@@ -483,38 +486,38 @@ subtext: {
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
-    padding: 16,
+    padding: 14,
   },
   errorText: {
     color: "#D32F2F",
-    fontSize: 16,
+    fontSize: 14,
     textAlign: "center",
   },
   powerContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    padding: 20,
+    padding: 16,
     borderRadius: 8,
     marginBottom: 34,
   },
   powerText: {
     color: "white",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
     marginLeft: 8,
   },
   componentsContainer: {
     backgroundColor: "white",
     borderRadius: 8,
-    padding: 16,
+    padding: 14,
     marginBottom: 24,
     elevation: 2,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "bold",
-    marginBottom: 12,
+    marginBottom: 10,
     color: "#333",
   },
   componentRow: {
@@ -530,8 +533,8 @@ subtext: {
     fontWeight: "500",
   },
   controlButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 5,
     borderRadius: 4,
     minWidth: 80,
     alignItems: "center",
@@ -626,7 +629,7 @@ subtext: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#F44336",
-    padding: 10,
+    padding: 8,
     borderRadius: 6,
     marginVertical: 4,
   },
