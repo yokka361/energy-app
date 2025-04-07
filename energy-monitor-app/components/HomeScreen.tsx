@@ -22,8 +22,6 @@ import { RootStackParamList } from "../app/(tabs)/index"; // Adjust the import p
 import * as Notifications from "expo-notifications";
 import { db } from "../firebaseConfig";
 import { ref, onValue, set } from "firebase/database";
-import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-
 
 
 // Configure notifications
@@ -259,11 +257,11 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           <Text style={styles.infoTitle}>Power Information</Text>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Warning Threshold:</Text>
-            <Text style={styles.infoValue}> 0.1Wh</Text>
+            <Text style={styles.infoValue}> {WARNING_THRESHOLD}Wh</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Critical Threshold:</Text>
-            <Text style={styles.infoValue}> 0.3Wh</Text>
+            <Text style={styles.infoValue}> {CRITICAL_THRESHOLD}Wh</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Current Status:</Text>
