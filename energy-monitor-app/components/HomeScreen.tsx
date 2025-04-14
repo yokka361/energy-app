@@ -1,5 +1,5 @@
 // HomeScreen.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -53,6 +53,8 @@ type MonitoringData = {
 export default function HomeScreen({ navigation }: HomeScreenProps) {
   // State variables
   const [loading, setLoading] = useState<boolean>(true);
+  const prevThresholdLevel = useRef(0);
+
   const [error, setError] = useState<string | null>(null);
   const [monitoringData, setMonitoringData] = useState<MonitoringData>({
     component1: false,
@@ -114,27 +116,28 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
 
   // Handle notifications and warning modal based on threshold and app state
   useEffect(() => {
-    if (monitoringData.thresholdLevel && appState !== "active") {
+    if (
+      monitoringData.thresholdLevel > prevThresholdLevel.current &&
+      appState !== "active"
+    ) {
       const thresholdText =
         monitoringData.thresholdLevel === 1 ? "Warning" : "Critical";
       const message =
         monitoringData.thresholdLevel === 1
-          ? `Power usage (${monitoringData.power}W) has exceeded the warning threshold.`
-          : `Power usage (${monitoringData.power}W) has reached critical levels!`;
+          ? "Power consumption has exceeded the warning threshold!"
+          : "Power consumption has exceeded the critical threshold!";
 
       if (notificationPermission) {
         schedulePushNotification(thresholdText, message);
       }
     }
-  }, [
-    monitoringData.thresholdLevel,
-    appState,
-    monitoringData.power,
-    notificationPermission,
-  ]);
 
-  const WARNING_THRESHOLD = monitoringData.WARNING_THRESHOLD/30; //in Wh
-  const CRITICAL_THRESHOLD = monitoringData.CRITICAL_THRESHOLD/30; //in Wh
+    prevThresholdLevel.current = monitoringData.thresholdLevel;
+  }, [monitoringData.thresholdLevel, appState, notificationPermission]);
+
+  const WARNING_THRESHOLD = monitoringData.WARNING_THRESHOLD / 30; //in Wh
+  const CRITICAL_THRESHOLD = monitoringData.CRITICAL_THRESHOLD / 30; //in Wh
+
   useEffect(() => {
     if (monitoringData.thresholdLevel && appState === "active") {
       setShowWarning(true);
@@ -142,31 +145,59 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     }
   }, [monitoringData.thresholdLevel, appState]);
 
+  // HomeScreen.tsx
+  useEffect(() => {
+    if (
+      monitoringData.component1 === false &&
+      monitoringData.component2 === false &&
+      monitoringData.component3 === false
+    ) {
+      // If all components are off, divide power value by 20
+      const adjustdailyEnergy = monitoringData.dailyEnergy - monitoringData.power;
+      const adjustedPowerValue = monitoringData.power / 20;
+      set(ref(db, "monitoring/power"), adjustedPowerValue);
+      set(ref(db, "monitoring/dailyEnergy"), adjustdailyEnergy);
+    }
+  }, [
+    monitoringData.component1,
+    monitoringData.component2,
+    monitoringData.component3,
+    monitoringData.power,
+    monitoringData.dailyEnergy,
+  ]);
+
   // Send command to Firebase for toggling a component
   const handleToggleComponent = async (componentId: number): Promise<void> => {
-    const currentState = monitoringData[
-      `component${componentId}` as keyof MonitoringData
-    ] as boolean;
-    const newState = currentState ? "OFF" : "ON";
-    const command = `TOGGLE:${componentId}:${newState}`;
+    const componentKey = `component${componentId}` as keyof MonitoringData;
+    const currentState = monitoringData[componentKey] as boolean;
+    const newState = !currentState;
+    const command = `TOGGLE:${componentId}:${newState ? "ON" : "OFF"}`;
 
     try {
-      // Step 1: Clear command first
+      // 1. Update Firebase with the new component state first
+      await set(ref(db, `monitoring/${componentKey}`), newState);
+
+      // 2. Clear command first
       await set(ref(db, "monitoring/command"), "NONE");
 
-      // Step 2: Wait a bit to let Firebase recognize the change
+      // 3. Small delay and then send command
       setTimeout(async () => {
-        // Step 3: Send new command
         await set(ref(db, "monitoring/command"), command);
-      }, 200); // ~200ms delay is usually enough
+      }, 200); // ~200ms delay
+      // ✅ If turning OFF a component while warning is active, reset threshold
+      if (!newState && monitoringData.thresholdLevel !== 0) {
+        await set(ref(db, "monitoring/thresholdLevel"), 0);
+      }
     } catch (err) {
-      Alert.alert("Error", "Failed to send toggle command.");
+      Alert.alert("Error", "Failed to toggle component.");
     }
   };
 
   // Dismiss the warning alert
   const dismissWarning = (): void => {
     setShowWarning(false);
+    // ✅ Reset threshold level to 0
+    set(ref(db, "monitoring/thresholdLevel"), 0);
   };
 
   // Send command to Firebase to turn off all components
@@ -291,12 +322,10 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           <Text style={styles.cardTitle}>Monthly Power Usage</Text>
           <View style={styles.usageRow}>
             <Text style={styles.usageValue}>
-              {(monitoringData.totalEnergy).toFixed(2)}
+              {monitoringData.totalEnergy.toFixed(2)}
               <Text style={styles.unit}> Wh</Text>
             </Text>
-            <Text style={styles.subtext}>
-              Total Energy Usage This Month
-            </Text>
+            <Text style={styles.subtext}>Total Energy Usage This Month</Text>
           </View>
         </View>
 
@@ -319,8 +348,8 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
             </Text>
             <Text style={styles.warningText}>
               {monitoringData.thresholdLevel === 1
-                ? `Power usage (${monitoringData.power}W) has exceeded the warning threshold.`
-                : `Power usage (${monitoringData.power}W) has reached critical levels!`}
+                ? `Power usage (${monitoringData.dailyEnergy}W) has exceeded the warning threshold.`
+                : `Power usage (${monitoringData.dailyEnergy}W) has reached critical levels!`}
             </Text>
 
             {/* List of active components to control individually */}
@@ -667,3 +696,5 @@ subtext: {
     fontWeight: "bold",
   },
 });
+// Removed the conflicting local useRef declaration
+
