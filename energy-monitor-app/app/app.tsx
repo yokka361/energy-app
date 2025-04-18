@@ -13,7 +13,7 @@ export default function App() {
   useEffect(() => {
     const prepareApp = async () => {
       // Simulate resource loading (or do real setup here)
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 500));
       setAppReady(true);
     };
     prepareApp();
