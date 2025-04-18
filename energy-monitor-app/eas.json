@@ -10,7 +10,7 @@
     },
     "preview2": {
       "android": {
-        "gradleCommand": ":app:assembleRelease"
+        "gradleCommand": ":app:clean assembleRelease"
       }
     },
     "preview3": {
