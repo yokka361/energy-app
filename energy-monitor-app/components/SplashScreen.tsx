@@ -22,7 +22,6 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
   const [messageIndex, setMessageIndex] = useState(0);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
-  const progressAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     let cycle = 0;
@@ -38,7 +37,6 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
     }, 1500);
 
     animateFade();
-    animateProgressBar();
     return () => clearInterval(interval);
   }, []);
 
@@ -59,20 +57,6 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
     ]).start();
   };
 
-  const animateProgressBar = () => {
-    Animated.timing(progressAnim, {
-      toValue: 1,
-      duration: messages.length * 1500, // total splash duration
-      easing: Easing.linear,
-      useNativeDriver: false,
-    }).start();
-  };
-
-  const progressBarWidth = progressAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, width - 40],
-  });
-
   return (
     <View style={styles.container}>
       <Animated.Text
@@ -86,12 +70,6 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
       >
         {messages[messageIndex]}
       </Animated.Text>
-
-      <View style={styles.progressBarContainer}>
-        <Animated.View
-          style={[styles.progressBar, { width: progressBarWidth }]}
-        />
-      </View>
 
       <View style={styles.credits}>
         <Text style={styles.creditText}>
@@ -117,20 +95,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     textAlign: "center",
     paddingHorizontal: 20,
-  },
-  progressBarContainer: {
-    height: 6,
-    width: "100%",
-    maxWidth: width - 40,
-    backgroundColor: "#7986CB",
-    borderRadius: 3,
-    overflow: "hidden",
-    marginTop: 30,
-  },
-  progressBar: {
-    height: 6,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 3,
   },
   credits: {
     position: "absolute",
