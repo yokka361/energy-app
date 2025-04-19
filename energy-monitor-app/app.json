@@ -4,7 +4,7 @@
     "slug": "energy-monitor-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon-new.png",
+    "icon": "./assets/images/icon1.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -38,8 +38,6 @@
       }
     },
     "splash": {
-      "image": "./assets/images/splash-new.png",
-      "resizeMode": "contain",
       "backgroundColor": "#3F51B5"
     }
   }
