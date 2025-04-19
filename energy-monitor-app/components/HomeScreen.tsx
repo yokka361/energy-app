@@ -13,9 +13,7 @@ import {
   AppState,
   AppStateStatus,
   Platform,
-  Dimensions
 } from "react-native";
-const { width, height } = Dimensions.get("window");
 // import { Audio } from "expo-av";
 import { Vibration } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -155,9 +153,8 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       monitoringData.component3 === false
     ) {
       // If all components are off, divide power value by 20
-      let adjustdailyEnergy = monitoringData.dailyEnergy - monitoringData.power;
+      const adjustdailyEnergy = monitoringData.dailyEnergy - monitoringData.power;
       const adjustedPowerValue = monitoringData.power / 20;
-      adjustdailyEnergy < 0 && (adjustdailyEnergy = 0); // Ensure daily energy is not negative
       set(ref(db, "monitoring/power"), adjustedPowerValue);
       set(ref(db, "monitoring/dailyEnergy"), adjustdailyEnergy);
     }
@@ -466,55 +463,88 @@ async function schedulePushNotification(
 //   }
 // }
 
-const STANDARD_FONT = 16;
-const BLOCK_WIDTH = "100%";
-
 const styles = StyleSheet.create({
+monthlyUsageCard: {
+  flex: 1,
+  flexDirection: 'column',
+  backgroundColor: '#ffffff',
+  borderRadius: 16,
+  padding: 15,
+  marginHorizontal: 20,
+  marginTop: -10,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.1,
+  shadowRadius: 6,
+  elevation: 4,
+  borderWidth: 1,
+  borderColor: '#eee',
+  marginBottom: 20,
+},
+
+cardTitle: {
+  fontSize: 15,
+  color: '#333333',
+  marginBottom: 12,
+  fontWeight: '600',
+},
+
+usageRow: {
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+},
+
+usageValue: {
+  fontSize: 32,
+  color: '#4CAF50', // Clean green
+  fontWeight: 'bold',
+},
+
+unit: {
+  fontSize: 20,
+  color: '#888888',
+},
+
+subtext: {
+  fontSize: 14,
+  color: '#999999',
+  marginTop: 4,
+},
+
+
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
-    paddingHorizontal: "5%",
-    paddingVertical: "2%",
+    padding: 14,
   },
   errorText: {
     color: "#D32F2F",
-    fontSize: STANDARD_FONT,
+    fontSize: 14,
     textAlign: "center",
   },
   powerContainer: {
-    marginTop: "12%",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#673AB7",
-    padding: 20,
-    borderRadius: 12,
-    marginBottom: 24,
-    width: BLOCK_WIDTH,
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 34,
   },
   powerText: {
-    color: "#fff",
-    fontSize: STANDARD_FONT,
-    fontWeight: "600",
-    marginLeft: 10,
-    flexShrink: 1,
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 8,
   },
-
   componentsContainer: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 4,
-    width: BLOCK_WIDTH,
+    backgroundColor: "white",
+    borderRadius: 8,
+    padding: 14,
+    marginBottom: 24,
+    elevation: 2,
   },
-
   sectionTitle: {
-    fontSize: STANDARD_FONT,
+    fontSize: 18,
     fontWeight: "bold",
     marginBottom: 10,
     color: "#333",
@@ -523,44 +553,34 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    flexWrap: "wrap",
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
   },
   componentName: {
-    fontSize: STANDARD_FONT,
+    fontSize: 16,
     fontWeight: "500",
-    flex: 1,
   },
   controlButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    backgroundColor: "#4CAF50",
+    paddingHorizontal: 20,
+    paddingVertical: 5,
+    borderRadius: 4,
+    minWidth: 80,
     alignItems: "center",
-    justifyContent: "center",
-    flexGrow: 1,
-    minWidth: 100,
-    maxWidth: "45%",
-    marginLeft: 10,
   },
   buttonText: {
-    color: "#fff",
+    color: "white",
     fontWeight: "bold",
-    fontSize: STANDARD_FONT,
   },
-
   infoContainer: {
-    backgroundColor: "#ffffff",
+    backgroundColor: "white",
     borderRadius: 8,
     padding: 16,
     marginBottom: 24,
     elevation: 2,
-    width: BLOCK_WIDTH,
   },
   infoTitle: {
-    fontSize: STANDARD_FONT,
+    fontSize: 18,
     fontWeight: "bold",
     marginBottom: 12,
     color: "#333",
@@ -573,56 +593,13 @@ const styles = StyleSheet.create({
     borderBottomColor: "#f0f0f0",
   },
   infoLabel: {
-    fontSize: STANDARD_FONT,
+    fontSize: 14,
     color: "#555",
   },
   infoValue: {
-    fontSize: STANDARD_FONT,
+    fontSize: 14,
     fontWeight: "500",
   },
-
-  monthlyUsageCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 15,
-    marginTop: -10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: "#eee",
-    marginBottom: 20,
-    width: BLOCK_WIDTH, // ✅ Ensures full width
-    alignSelf: "center", // Optional: centers within parent if needed
-  },
-
-  cardTitle: {
-    fontSize: STANDARD_FONT,
-    color: "#333333",
-    marginBottom: 12,
-    fontWeight: "600",
-  },
-  usageRow: {
-    flexDirection: "column",
-    alignItems: "flex-start",
-  },
-  usageValue: {
-    fontSize: STANDARD_FONT + 16,
-    color: "#4CAF50",
-    fontWeight: "bold",
-  },
-  unit: {
-    fontSize: STANDARD_FONT + 4,
-    color: "#888888",
-  },
-  subtext: {
-    fontSize: STANDARD_FONT - 2,
-    color: "#999999",
-    marginTop: 4,
-  },
-
   tariffButton: {
     marginTop: 16,
     backgroundColor: "#3F51B5",
@@ -633,15 +610,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     elevation: 2,
     marginBottom: 24,
-    width: BLOCK_WIDTH,
   },
   tariffButtonText: {
     color: "white",
-    fontSize: STANDARD_FONT,
+    fontSize: 16,
     fontWeight: "bold",
     marginLeft: 8,
   },
-
   centeredView: {
     flex: 1,
     justifyContent: "center",
@@ -649,26 +624,22 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   warningModal: {
-    width: "90%",
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 24,
+    width: "80%",
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 20,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 6,
+    elevation: 5,
   },
   warningTitle: {
-    fontSize: STANDARD_FONT,
+    fontSize: 18,
     fontWeight: "bold",
     marginTop: 12,
     marginBottom: 8,
     textAlign: "center",
   },
   warningText: {
-    fontSize: STANDARD_FONT,
+    fontSize: 14,
     textAlign: "center",
     marginBottom: 16,
     color: "#555",
@@ -678,7 +649,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   componentControlTitle: {
-    fontSize: STANDARD_FONT,
+    fontSize: 14,
     fontWeight: "500",
     marginBottom: 8,
     color: "#333",
@@ -695,28 +666,24 @@ const styles = StyleSheet.create({
     color: "white",
     marginLeft: 8,
     fontWeight: "500",
-    fontSize: STANDARD_FONT,
   },
   noComponentsText: {
     color: "#757575",
     fontStyle: "italic",
     textAlign: "center",
     marginVertical: 8,
-    fontSize: STANDARD_FONT - 2,
   },
   warningButtons: {
     flexDirection: "row",
     justifyContent: "space-between",
     width: "100%",
-    flexWrap: "wrap",
   },
   warningButton: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 30,
+    padding: 12,
+    borderRadius: 4,
     alignItems: "center",
-    marginHorizontal: 8,
-    marginVertical: 5,
+    margin: 4,
   },
   actionButton: {
     backgroundColor: "#F44336",
@@ -727,6 +694,7 @@ const styles = StyleSheet.create({
   warningButtonText: {
     color: "white",
     fontWeight: "bold",
-    fontSize: STANDARD_FONT,
   },
 });
+// Removed the conflicting local useRef declaration
+

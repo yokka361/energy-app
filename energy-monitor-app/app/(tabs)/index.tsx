@@ -13,16 +13,15 @@ const Stack = createStackNavigator<RootStackParamList>();
 export default function AppNavigator() {
   return (
     <Stack.Navigator initialRouteName="Home">
-      <Stack.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{ headerShown: false }} // ✅ No header for Home
-        // options={{ title: "Smart Energy Meter" }}
+      <Stack.Screen 
+        name="Home" 
+        component={HomeScreen} 
+        options={{ title: 'Smart Energy Meter' }} 
       />
-      <Stack.Screen
-        name="Tariff"
-        component={TariffScreen}
-        options={{ title: "Tariff Calculation" }}
+      <Stack.Screen 
+        name="Tariff" 
+        component={TariffScreen} 
+        options={{ title: 'Tariff Calculation' }} 
       />
     </Stack.Navigator>
   );
