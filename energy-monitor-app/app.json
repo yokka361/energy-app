@@ -13,7 +13,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon1.png",
+        "foregroundImage": "./assets/images/icon-new.png",
         "backgroundColor": "#3F51B5"
       },
       "package": "com.yokka361.energymonitorapp"
